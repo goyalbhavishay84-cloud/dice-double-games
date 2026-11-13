@@ -13,6 +13,7 @@
     input { background: #0f172a; color: white; }
     button { background: #22c55e; color: white; font-weight: bold; border: none; cursor: pointer; }
     button.secondary { background: #334155; }
+    button.otp-btn { background: #0284c7; margin-bottom: 0; white-space: nowrap; width: auto; padding: 12px 14px; }
     .hidden { display: none; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 12px; }
     .balance { color: #4ade80; font-weight: bold; font-size: 1.2rem; }
@@ -24,18 +25,47 @@
     .tabs button { margin: 0; padding: 8px; font-size: 0.9rem; }
     .log-item { font-size: 0.85rem; padding: 8px; background: #0f172a; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; }
     .win { color: #4ade80; } .loss { color: #f87171; }
+    .row-flex { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
+    .row-flex input { margin-bottom: 0; }
+    .qr-box { background: #ffffff; color: #0f172a; padding: 14px; border-radius: 12px; text-align: center; margin-bottom: 14px; }
+    .qr-box img { width: 200px; height: 200px; object-fit: contain; border-radius: 8px; border: 1px solid #cbd5e1; margin: 8px auto; display: block; }
+    .upi-pill { display: inline-flex; align-items: center; gap: 8px; background: #f1f5f9; padding: 6px 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; margin-top: 6px; }
+    .copy-mini { background: #0f172a; color: #fff; padding: 4px 10px; font-size: 0.8rem; border-radius: 6px; width: auto; margin: 0; }
   </style>
 </head>
 <body>
 
   <!-- AUTH SCREEN -->
   <div class="card" id="authCard">
-    <h2>🎲 Dice Double Login</h2>
-    <input type="text" id="username" placeholder="Username" />
-    <input type="password" id="password" placeholder="Password" />
-    <button onclick="auth('login')">Login</button>
-    <button class="secondary" onclick="auth('register')">Create New Account</button>
-    <p id="authMsg" class="loss"></p>
+    <!-- LOGIN FORM -->
+    <div id="loginBox">
+      <h2>🎲 Dice Double Login</h2>
+      <input type="text" id="loginUser" placeholder="Username or Email" />
+      <input type="password" id="loginPass" placeholder="Password" />
+      <button onclick="loginUser()">Login</button>
+      <button class="secondary" onclick="toggleAuthForm(true)">Create New Account</button>
+    </div>
+
+    <!-- CREATE ACCOUNT FORM WITH EMAIL OTP -->
+    <div id="registerBox" class="hidden">
+      <h2>📝 Create New Account</h2>
+      <input type="text" id="regFullName" placeholder="Full Name" />
+      <input type="tel" id="regPhone" maxlength="10" placeholder="10-Digit Mobile Number" />
+      <input type="text" id="regUsername" placeholder="Choose Username" />
+      
+      <div class="row-flex">
+        <input type="email" id="regEmail" placeholder="Email Address (For OTP)" />
+        <button type="button" class="otp-btn" id="sendOtpBtn" onclick="sendEmailOtp()">Send OTP</button>
+      </div>
+
+      <input type="text" id="regOtp" maxlength="6" placeholder="Enter 6-Digit Email OTP" />
+      <input type="password" id="regPass" placeholder="Create Password" />
+      
+      <button onclick="registerUser()">Verify & Create Account</button>
+      <button class="secondary" onclick="toggleAuthForm(false)">Back to Login</button>
+    </div>
+
+    <p id="authMsg" style="margin-top:6px;font-size:0.9rem;"></p>
   </div>
 
   <!-- GAME & WALLET SCREEN -->
@@ -70,9 +100,18 @@
       <div id="betHistory"></div>
     </div>
 
-    <!-- DEPOSIT TAB -->
+    <!-- DEPOSIT TAB WITH QR SCANNER -->
     <div id="depositTab" class="hidden">
-      <p style="margin-bottom:10px;color:#94a3b8;">Send payment to Official UPI: <strong>goyalbhavishay84-2@okhdfcbank</strong> and submit UTR below:</p>
+      <div class="qr-box">
+        <p style="font-weight:bold;font-size:1rem;">Scan QR via GPay / PhonePe / Paytm</p>
+        <img src="/qr.png" alt="UPI QR Scanner" />
+        <div class="upi-pill">
+          <span id="upiText">goyalbhavishay84-2@okhdfcbank</span>
+          <button type="button" class="copy-mini" onclick="copyUpi()">Copy</button>
+        </div>
+      </div>
+
+      <p style="margin-bottom:10px;color:#94a3b8;font-size:0.88rem;">Payment karne ke baad amount aur 12-digit UTR number niche submit karein:</p>
       <input type="number" id="depAmount" placeholder="Deposit Amount (₹)" />
       <input type="text" id="depUtr" placeholder="12-Digit UTR / Transaction Ref" />
       <button onclick="submitDeposit()">Submit Deposit Request</button>
@@ -97,10 +136,86 @@
 
     if (token) loadProfile();
 
-    async function auth(type) {
-      const username = document.getElementById('username').value;
-      const password = document.getElementById('password').value;
-      const res = await fetch(`/api/${type}`, {
+    function toggleAuthForm(showRegister) {
+      document.getElementById('authMsg').textContent = '';
+      if (showRegister) {
+        document.getElementById('loginBox').classList.add('hidden');
+        document.getElementById('registerBox').classList.remove('hidden');
+      } else {
+        document.getElementById('registerBox').classList.add('hidden');
+        document.getElementById('loginBox').classList.remove('hidden');
+      }
+    }
+
+    async function sendEmailOtp() {
+      const email = document.getElementById('regEmail').value.trim();
+      const msgEl = document.getElementById('authMsg');
+      const btn = document.getElementById('sendOtpBtn');
+
+      if (!email || !email.includes('@')) {
+        msgEl.className = 'loss';
+        msgEl.textContent = 'Pehle valid Email Address darj karein.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      msgEl.textContent = '';
+
+      try {
+        const res = await fetch('/api/send-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          msgEl.className = 'win';
+          msgEl.textContent = data.message;
+        } else {
+          msgEl.className = 'loss';
+          msgEl.textContent = data.error;
+        }
+      } catch (e) {
+        msgEl.className = 'loss';
+        msgEl.textContent = 'Network error while sending OTP';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Resend OTP';
+      }
+    }
+
+    async function registerUser() {
+      const fullName = document.getElementById('regFullName').value;
+      const phone = document.getElementById('regPhone').value;
+      const username = document.getElementById('regUsername').value;
+      const email = document.getElementById('regEmail').value;
+      const otp = document.getElementById('regOtp').value;
+      const password = document.getElementById('regPass').value;
+      const msgEl = document.getElementById('authMsg');
+
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName, phone, email, username, password, otp })
+      });
+      const data = await res.json();
+      if (data.token) {
+        token = data.token;
+        localStorage.setItem('token', token);
+        loadProfile();
+      } else {
+        msgEl.className = 'loss';
+        msgEl.textContent = data.error;
+      }
+    }
+
+    async function loginUser() {
+      const username = document.getElementById('loginUser').value;
+      const password = document.getElementById('loginPass').value;
+      const msgEl = document.getElementById('authMsg');
+
+      const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -111,8 +226,15 @@
         localStorage.setItem('token', token);
         loadProfile();
       } else {
-        document.getElementById('authMsg').textContent = data.error;
+        msgEl.className = 'loss';
+        msgEl.textContent = data.error;
       }
+    }
+
+    function copyUpi() {
+      const upi = document.getElementById('upiText').textContent;
+      navigator.clipboard.writeText(upi);
+      alert('UPI ID Copied: ' + upi);
     }
 
     async function loadProfile() {

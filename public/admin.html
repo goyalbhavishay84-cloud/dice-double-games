@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin Control Panel</title>
+  <style>
+    body { background: #0f172a; color: #f8fafc; font-family: 'Segoe UI', sans-serif; padding: 24px; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat-box { background: #1e293b; padding: 18px; border-radius: 12px; border: 1px solid #334155; }
+    .stat-box h3 { font-size: 0.85rem; color: #94a3b8; }
+    .stat-box p { font-size: 1.5rem; font-weight: bold; color: #38bdf8; margin-top: 6px; }
+    table { width: 100%; border-collapse: collapse; background: #1e293b; margin-bottom: 28px; border-radius: 10px; overflow: hidden; }
+    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+    th { background: #334155; }
+    button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .approve { background: #22c55e; color: white; }
+    .reject { background: #ef4444; color: white; }
+  </style>
+</head>
+<body>
+
+  <h1>🛡️ Admin Master Dashboard</h1>
+
+  <div id="loginBox" style="margin: 20px 0;">
+    <input type="password" id="adminKey" placeholder="Enter Admin Secret Key" style="padding:10px;border-radius:6px;" />
+    <button class="approve" onclick="loadAdmin()">Access Dashboard</button>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+    <div class="stats">
+      <div class="stat-box"><h3>Total Deposits</h3><p id="sDep">₹0</p></div>
+      <div class="stat-box"><h3>Total Withdrawals</h3><p id="sWit">₹0</p></div>
+      <div class="stat-box"><h3>Total Wagered</h3><p id="sWag">₹0</p></div>
+      <div class="stat-box"><h3>Net House Profit</h3><p id="sProf" style="color:#4ade80;">₹0</p></div>
+    </div>
+
+    <h2>Deposit & Withdrawal Requests</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>User</th><th>Type</th><th>Amount</th><th>UTR / UPI</th><th>Status</th><th>Action</th></tr>
+      </thead>
+      <tbody id="txnTable"></tbody>
+    </table>
+
+    <h2>Registered Players & Wallets</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Username</th><th>Wallet Balance</th><th>Joined</th></tr>
+      </thead>
+      <tbody id="userTable"></tbody>
+    </table>
+
+    <h2>Live Game Logs</h2>
+    <table>
+      <thead>
+        <tr><th>User</th><th>Picked</th><th>Dice</th><th>Bet</th><th>Payout</th><th>Outcome</th></tr>
+      </thead>
+      <tbody id="betTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    let adminKey = '';
+
+    async function loadAdmin() {
+      adminKey = document.getElementById('adminKey').value;
+      const res = await fetch('/api/admin/dashboard', { headers: { 'x-admin-key': adminKey } });
+      if (!res.ok) return alert('Wrong Admin Key!');
+
+      const data = await res.json();
+      document.getElementById('loginBox').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+
+      document.getElementById('sDep').textContent = '₹' + data.stats.totalDeposits;
+      document.getElementById('sWit').textContent = '₹' + data.stats.totalWithdrawals;
+      document.getElementById('sWag').textContent = '₹' + data.stats.totalWagered;
+      document.getElementById('sProf').textContent = '₹' + data.stats.houseProfit;
+
+      document.getElementById('txnTable').innerHTML = data.transactions.map(t => `
+        <tr>
+          <td>#${t.id}</td>
+          <td>${t.username}</td>
+          <td><strong>${t.type}</strong></td>
+          <td>₹${t.amount}</td>
+          <td>${t.reference}</td>
+          <td>${t.status}</td>
+          <td>
+            ${t.status === 'PENDING' ? `
+              <button class="approve" onclick="processTxn(${t.id}, 'APPROVED')">Approve</button>
+              <button class="reject" onclick="processTxn(${t.id}, 'REJECTED')">Reject</button>
+            ` : 'Processed'}
+          </td>
+        </tr>
+      `).join('');
+
+      document.getElementById('userTable').innerHTML = data.users.map(u => `
+        <tr><td>${u.id}</td><td>${u.username}</td><td>₹${u.balance.toFixed(2)}</td><td>${u.created_at}</td></tr>
+      `).join('');
+
+      document.getElementById('betTable').innerHTML = data.bets.map(b => `
+        <tr><td>${b.username}</td><td>${b.chosen_number}</td><td>${b.rolled_number}</td><td>₹${b.bet_amount}</td><td>₹${b.payout}</td><td>${b.outcome}</td></tr>
+      `).join('');
+    }
+
+    async function processTxn(id, action) {
+      await fetch(`/api/admin/transaction/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+        body: JSON.stringify({ action })
+      });
+      loadAdmin();
+    }
+  </script>
+</body>
+</html>

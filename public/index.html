@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dice Double - Player Portal</title>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
+    body { background: #0f172a; color: #f8fafc; display: flex; justify-content: center; padding: 20px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 24px; width: 100%; max-width: 460px; }
+    h2 { color: #38bdf8; margin-bottom: 16px; }
+    input, button { width: 100%; padding: 12px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #334155; font-size: 1rem; }
+    input { background: #0f172a; color: white; }
+    button { background: #22c55e; color: white; font-weight: bold; border: none; cursor: pointer; }
+    button.secondary { background: #334155; }
+    .hidden { display: none; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 12px; }
+    .balance { color: #4ade80; font-weight: bold; font-size: 1.2rem; }
+    .dice-display { width: 90px; height: 90px; margin: 16px auto; background: #f8fafc; color: #0f172a; font-size: 2.8rem; font-weight: 800; border-radius: 16px; display: flex; align-items: center; justify-content: center; }
+    .num-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 14px; }
+    .num-btn { background: #0f172a; border: 1px solid #334155; margin: 0; padding: 10px 0; }
+    .num-btn.active { background: #38bdf8; color: #0f172a; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tabs button { margin: 0; padding: 8px; font-size: 0.9rem; }
+    .log-item { font-size: 0.85rem; padding: 8px; background: #0f172a; border-radius: 6px; margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .win { color: #4ade80; } .loss { color: #f87171; }
+  </style>
+</head>
+<body>
+
+  <!-- AUTH SCREEN -->
+  <div class="card" id="authCard">
+    <h2>🎲 Dice Double Login</h2>
+    <input type="text" id="username" placeholder="Username" />
+    <input type="password" id="password" placeholder="Password" />
+    <button onclick="auth('login')">Login</button>
+    <button class="secondary" onclick="auth('register')">Create New Account</button>
+    <p id="authMsg" class="loss"></p>
+  </div>
+
+  <!-- GAME & WALLET SCREEN -->
+  <div class="card hidden" id="appCard">
+    <div class="top-bar">
+      <div>👤 <span id="userDisplay"></span></div>
+      <div class="balance">₹<span id="balanceDisplay">0</span></div>
+      <button class="secondary" style="width:auto;padding:6px 12px;margin:0;" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="tabs">
+      <button onclick="showTab('gameTab')">Play Dice</button>
+      <button class="secondary" onclick="showTab('depositTab')">Deposit</button>
+      <button class="secondary" onclick="showTab('withdrawTab')">Withdraw</button>
+    </div>
+
+    <!-- GAME TAB -->
+    <div id="gameTab">
+      <div class="dice-display" id="diceBox">?</div>
+      <div class="num-grid" id="numGrid">
+        <button class="num-btn" onclick="selectNum(1, this)">1</button>
+        <button class="num-btn" onclick="selectNum(2, this)">2</button>
+        <button class="num-btn" onclick="selectNum(3, this)">3</button>
+        <button class="num-btn" onclick="selectNum(4, this)">4</button>
+        <button class="num-btn" onclick="selectNum(5, this)">5</button>
+        <button class="num-btn" onclick="selectNum(6, this)">6</button>
+      </div>
+      <input type="number" id="betAmount" placeholder="Bet Amount (₹)" value="100" />
+      <button onclick="placeBet()">Roll Dice (2X Payout)</button>
+      <p id="gameMsg" style="text-align:center;margin-bottom:12px;font-weight:bold;"></p>
+      <h4 style="margin-bottom:8px;color:#94a3b8;">Your Recent Bets</h4>
+      <div id="betHistory"></div>
+    </div>
+
+    <!-- DEPOSIT TAB -->
+    <div id="depositTab" class="hidden">
+      <p style="margin-bottom:10px;color:#94a3b8;">Send payment to Official UPI: <strong>goyalbhavishay84-2@okhdfcbank</strong> and submit UTR below:</p>
+      <input type="number" id="depAmount" placeholder="Deposit Amount (₹)" />
+      <input type="text" id="depUtr" placeholder="12-Digit UTR / Transaction Ref" />
+      <button onclick="submitDeposit()">Submit Deposit Request</button>
+      <p id="depMsg"></p>
+    </div>
+
+    <!-- WITHDRAW TAB -->
+    <div id="withdrawTab" class="hidden">
+      <input type="number" id="witAmount" placeholder="Withdraw Amount (₹)" />
+      <input type="text" id="witUpi" placeholder="Your UPI ID / Bank Account" />
+      <button onclick="submitWithdraw()">Request Withdrawal</button>
+      <p id="witMsg"></p>
+    </div>
+
+    <h4 style="margin:14px 0 8px;color:#94a3b8;">Wallet Transactions</h4>
+    <div id="txnHistory"></div>
+  </div>
+
+  <script>
+    let token = localStorage.getItem('token');
+    let chosenNumber = null;
+
+    if (token) loadProfile();
+
+    async function auth(type) {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch(`/api/${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.token) {
+        token = data.token;
+        localStorage.setItem('token', token);
+        loadProfile();
+      } else {
+        document.getElementById('authMsg').textContent = data.error;
+      }
+    }
+
+    async function loadProfile() {
+      const res = await fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return logout();
+      const data = await res.json();
+
+      document.getElementById('authCard').classList.add('hidden');
+      document.getElementById('appCard').classList.remove('hidden');
+      document.getElementById('userDisplay').textContent = data.user.username;
+      document.getElementById('balanceDisplay').textContent = data.user.balance.toFixed(2);
+
+      document.getElementById('betHistory').innerHTML = data.bets.map(b => `
+        <div class="log-item">
+          <span>Pick: ${b.chosen_number} | Dice: ${b.rolled_number} (₹${b.bet_amount})</span>
+          <span class="${b.outcome === 'WIN' ? 'win' : 'loss'}">${b.outcome} ${b.payout > 0 ? '+₹'+b.payout : ''}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('txnHistory').innerHTML = data.transactions.map(t => `
+        <div class="log-item">
+          <span>${t.type} - ₹${t.amount} (${t.reference})</span>
+          <span>${t.status}</span>
+        </div>
+      `).join('');
+    }
+
+    function selectNum(n, el) {
+      chosenNumber = n;
+      document.querySelectorAll('.num-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    async function placeBet() {
+      const betAmount = document.getElementById('betAmount').value;
+      if (!chosenNumber) return alert('Select a number 1-6 first!');
+
+      const res = await fetch('/api/roll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ chosenNumber, betAmount })
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error);
+
+      document.getElementById('diceBox').textContent = data.rolledNumber;
+      const msg = document.getElementById('gameMsg');
+      msg.textContent = data.outcome === 'WIN' ? `🎉 Won ₹${data.payout}!` : `❌ Lost! Rolled ${data.rolledNumber}`;
+      msg.className = data.outcome === 'WIN' ? 'win' : 'loss';
+      loadProfile();
+    }
+
+    async function submitDeposit() {
+      const amount = parseFloat(document.getElementById('depAmount').value);
+      const utr = document.getElementById('depUtr').value;
+      const res = await fetch('/api/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount, utr })
+      });
+      const data = await res.json();
+      document.getElementById('depMsg').textContent = data.message || data.error;
+      loadProfile();
+    }
+
+    async function submitWithdraw() {
+      const amount = parseFloat(document.getElementById('witAmount').value);
+      const upiId = document.getElementById('witUpi').value;
+      const res = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ amount, upiId })
+      });
+      const data = await res.json();
+      document.getElementById('witMsg').textContent = data.message || data.error;
+      loadProfile();
+    }
+
+    function showTab(id) {
+      ['gameTab', 'depositTab', 'withdrawTab'].forEach(t => document.getElementById(t).classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      location.reload();
+    }
+  </script>
+</body>
+</html>

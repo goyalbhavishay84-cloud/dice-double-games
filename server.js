@@ -136,3 +136,142 @@ app.post('/api/send-otp', async (req, res) => {
         htmlContent: `
           <div style="font-family:Arial,sans-serif;padding:20px;background:#0f172a;color:#f8fafc;border-radius:10px;">
             <h2 style="color:#38bdf8;">🎲 Dice Double Account Verification</h2>
+            <p>Aapka naya account verify karne ke liye OTP niche diya gaya hai:</p>
+            <div style="font-size:28px;font-weight:bold;letter-spacing:6px;color:#4ade80;margin:16px 0;">${otp}</div>
+            <p style="color:#94a3b8;font-size:13px;">Ye OTP 10 minute ke liye valid hai.</p>
+          </div>
+        `
+      });
+      res.json({ message: 'OTP aapke Email par bhej diya gaya hai! (Spam folder bhi check karein)' });
+    } catch (mailErr) {
+      console.error('Brevo Mail error:', mailErr);
+      res.status(500).json({ error: 'OTP bhejne me dikkat aayi. Render par BREVO_API_KEY check karein.' });
+    }
+  });
+});
+
+// Send Email OTP for Forgot Password
+app.post('/api/forgot-password/send-otp', async (req, res) => {
+  const { email } = req.body;
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid registered Email ID darj karein' });
+  }
+
+  db.get(`SELECT id, username FROM users WHERE email = ?`, [email.toLowerCase().trim()], async (err, user) => {
+    if (!user) {
+      return res.status(404).json({ error: 'Is Email ID se koi account nahi mila' });
+    }
+
+    const otp = crypto.randomInt(100000, 999999).toString();
+    resetOtpStore.set(email.toLowerCase().trim(), {
+      otp,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
+
+    try {
+      await sendBrevoEmail({
+        toEmail: email.trim(),
+        toName: user.username,
+        subject: 'Dice Double - Password Reset OTP',
+        htmlContent: `
+          <div style="font-family:Arial,sans-serif;padding:20px;background:#0f172a;color:#f8fafc;border-radius:10px;">
+            <h2 style="color:#38bdf8;">🔐 Password Reset Request</h2>
+            <p>Hello <b>${user.username}</b>, password reset karne ke liye OTP niche diya gaya hai:</p>
+            <div style="font-size:28px;font-weight:bold;letter-spacing:6px;color:#facc15;margin:16px 0;">${otp}</div>
+            <p style="color:#94a3b8;font-size:13px;">Ye OTP 10 minute ke liye valid hai.</p>
+          </div>
+        `
+      });
+      res.json({ message: 'Password reset OTP aapke Email par bhej diya gaya hai!' });
+    } catch (mailErr) {
+      console.error('Brevo Reset error:', mailErr);
+      res.status(500).json({ error: 'OTP bhejne me dikkat aayi. BREVO_API_KEY check karein.' });
+    }
+  });
+});
+
+// Verify OTP & Reset Password
+app.post('/api/forgot-password/reset', async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ error: 'Email, OTP aur naya password bharna zaroori hai' });
+  }
+
+  if (newPassword.length < 4) {
+    return res.status(400).json({ error: 'Password kam se kam 4 characters ka rakhein' });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const record = resetOtpStore.get(cleanEmail);
+  if (!record || record.otp !== otp.trim() || Date.now() > record.expiresAt) {
+    return res.status(400).json({ error: 'Galat ya expired Email OTP' });
+  }
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+  db.run(`UPDATE users SET password = ? WHERE email = ?`, [hashed, cleanEmail], function (err) {
+    if (err || this.changes === 0) {
+      return res.status(400).json({ error: 'Password update nahi ho paya' });
+    }
+    resetOtpStore.delete(cleanEmail);
+    res.json({ message: 'Password successfully reset ho gaya! Ab naye password se login karein.' });
+  });
+});
+
+// Register with Email OTP Verification
+app.post('/api/register', async (req, res) => {
+  const { fullName, phone, email, username, password, otp } = req.body;
+
+  if (!fullName || !phone || !email || !username || !password || !otp) {
+    return res.status(400).json({ error: 'Saari details aur Email OTP bharna zaroori hai' });
+  }
+
+  if (!/^\d{10}$/.test(phone.trim())) {
+    return res.status(400).json({ error: '10-digit ka valid mobile number darj karein' });
+  }
+
+  const record = otpStore.get(email.toLowerCase().trim());
+  if (!record || record.otp !== otp.trim() || Date.now() > record.expiresAt) {
+    return res.status(400).json({ error: 'Galat ya expired Email OTP' });
+  }
+
+  const hashed = await bcrypt.hash(password, 10);
+  db.run(
+    `INSERT INTO users (username, full_name, phone, email, password, balance) VALUES (?, ?, ?, ?, ?, 0)`,
+    [username.trim(), fullName.trim(), phone.trim(), email.toLowerCase().trim(), hashed],
+    function (err) {
+      if (err) {
+        return res.status(400).json({ error: 'Username ya Email pehle se maujood hai' });
+      }
+      otpStore.delete(email.toLowerCase().trim());
+      const token = jwt.sign({ id: this.lastID, username: username.trim() }, JWT_SECRET, { expiresIn: '7d' });
+      res.json({ token, username: username.trim(), balance: 0 });
+    }
+  );
+});
+
+// Login (Supports Username or Email)
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username/Email aur password darj karein' });
+
+  db.get(
+    `SELECT * FROM users WHERE username = ? OR email = ?`,
+    [username.trim(), username.toLowerCase().trim()],
+    async (err, user) => {
+      if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+      res.json({ token, username: user.username, balance: user.balance });
+    }
+  );
+});
+
+// ================= USER ROUTES =================
+
+app.get('/api/me', authenticateUser, (req, res) => {
+  db.get(`SELECT id, username, full_name, phone, email, balance FROM users WHERE id = ?`, [req.userId], (err, user) => {
+    db.all(`SELECT * FROM transactions WHERE user_id = ? ORDER BY id DESC LIMIT 15`, [req.userId], (err, txns) => {
+      db.all(`SELECT * FROM bets WHERE user_id = ? ORDER BY id DESC LIMIT 15`, [req.userId], (err, bets) => {
+        res.json({ user, transactions: txns, bets });
+      });

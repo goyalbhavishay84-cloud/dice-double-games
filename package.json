@@ -1,15 +1,11 @@
 {
-  "name": "dice-gaming-platform",
+  "name": "dice-double-games",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.16",
-    "sqlite3": "^5.1.7"
+    "express": "^4.18.2"
   }
 }

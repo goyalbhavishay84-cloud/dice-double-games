@@ -20,23 +20,32 @@
             align-items: center;
             justify-content: center;
         }
-        .container {
+        .game-container {
             background: rgba(255, 255, 255, 0.05);
             padding: 40px;
             border-radius: 16px;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
             backdrop-filter: blur(8px);
             text-align: center;
-            max-width: 400px;
+            max-width: 450px;
             width: 90%;
         }
         h1 {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             color: #00d2ff;
         }
-        p {
+        .subtitle {
             margin-bottom: 30px;
             color: #b0b0c3;
+            font-size: 14px;
+        }
+        .dice-box {
+            font-size: 60px;
+            margin: 20px 0;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            border-radius: 12px;
+            letter-spacing: 20px;
         }
         .btn {
             background: linear-gradient(135deg, #00c6ff, #0072ff);
@@ -48,24 +57,47 @@
             border-radius: 8px;
             cursor: pointer;
             transition: transform 0.2s, opacity 0.2s;
+            margin-top: 15px;
         }
         .btn:hover {
             transform: scale(1.05);
             opacity: 0.9;
         }
+        .score {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #00ffcc;
+        }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>🎲 Dice Double Games</h1>
-        <p>Bina kisi login ya OTP ke seedha game ka maza lein!</p>
-        <button class="btn" onclick="startGame()">Play Now</button>
+    <div class="game-container">
+        <h1>🎲 Dice Double Game</h1>
+        <p class="subtitle">Bina kisi login ya OTP ke seedha khelo!</p>
+        
+        <div class="dice-box" id="diceDisplay">🎲 🎲</div>
+        
+        <button class="btn" onclick="rollDice()">Roll Dice</button>
+        
+        <div class="score" id="resultText">Dice roll karne ke liye button dabayein!</div>
     </div>
 
     <script>
-        function startGame() {
-            alert('Game jald hi shuru hogi! Yahan aap apna dice roll logic daal sakte hain.');
+        function rollDice() {
+            const dice1 = Math.floor(Math.random() * 6) + 1;
+            const dice2 = Math.floor(Math.random() * 6) + 1;
+            
+            // Dice emojis symbols mapping
+            const diceEmojis = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+            
+            document.getElementById('diceDisplay').innerHTML = `${diceEmojis[dice1]} ${diceEmojis[dice2]}`;
+            
+            if (dice1 === dice2) {
+                document.getElementById('resultTextinnerHTML = `🎉 Double Aaya! You Win! (${dice1} & ${dice2})`;`
+            } else {
+                document.getElementById('resultText').innerHTML = `Score: ${dice1 + dice2} (${dice1} aur ${dice2})`;
+            }
         }
     </script>
 

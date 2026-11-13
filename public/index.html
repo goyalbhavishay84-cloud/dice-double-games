@@ -88,13 +88,12 @@
             const dice1 = Math.floor(Math.random() * 6) + 1;
             const dice2 = Math.floor(Math.random() * 6) + 1;
             
-            // Dice emojis symbols mapping
             const diceEmojis = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
             
             document.getElementById('diceDisplay').innerHTML = `${diceEmojis[dice1]} ${diceEmojis[dice2]}`;
             
             if (dice1 === dice2) {
-                document.getElementById('resultTextinnerHTML = `🎉 Double Aaya! You Win! (${dice1} & ${dice2})`;`
+                document.getElementById('resultText').innerHTML = `🎉 Double Aaya! You Win! (${dice1} & ${dice2})`;
             } else {
                 document.getElementById('resultText').innerHTML = `Score: ${dice1 + dice2} (${dice1} aur ${dice2})`;
             }
